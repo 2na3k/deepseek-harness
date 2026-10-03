@@ -92,6 +92,8 @@ interface EditorTarget extends ProviderIdentity {
   credentialRef?: string
   /** The adapter reports this route as one it does not ship (see {@link ProviderEditorProps.declared}). */
   declared?: boolean
+  /** Registered sign-in flow for the provider route, when it offers one. */
+  authorization?: ProviderRow['authorization']
 }
 
 /** A dormant directory row the add card can adopt, with its registered namespace. */
@@ -109,7 +111,7 @@ interface CatalogDraft {
 /** Values that vary around the shared provider-editor rendering. */
 interface ProviderEditorRenderProps extends Pick<
   ProviderEditorProps,
-  'namespace' | 'schema' | 'operations' | 't' | 'readOnly' | 'onClose'
+  'namespace' | 'schema' | 'operations' | 't' | 'readOnly' | 'onClose' | 'onAuthorizationChanged'
 > {
   target: EditorTarget
 }
@@ -121,6 +123,7 @@ function renderProviderEditor({ target, ...props }: ProviderEditorRenderProps): 
       provider={target.provider}
       displayName={target.displayName}
       settingsPath={target.settingsPath}
+      {...target.authorization === undefined ? {} : { authorization: target.authorization }}
       {...target.declared === true ? { declared: true } : {}}
       {...props}
     />
@@ -173,16 +176,15 @@ export function needsSetup(row: ProviderRow, anyUsable: boolean): boolean {
 }
 
 /**
- * The provider-card seat's credential fact: the reference this page would use
- * for the row — the profile's `apiKeyEnv`, or the page's derived
- * `<ROUTE>_API_KEY` while the profile names none — confirmed configured. The
- * derived half is what keeps the seat consistent with the editor on the
- * add-provider draft, whose dormant row names no reference yet.
+ * The provider-card seat's credential fact: the profile's referenced or
+ * derived API-key record, or a credential stored by the provider's registered
+ * sign-in flow. The derived half keeps the seat consistent with the editor on
+ * the add-provider draft, whose dormant row names no reference yet.
  */
 function keyConfiguredOf(row: ProviderRow): boolean {
-  return row.apiKeyEnv !== undefined
+  return row.authorization?.credential.configured === true || (row.apiKeyEnv !== undefined
     ? row.credential?.configured === true
-    : row.derivedCredential?.configured === true
+    : row.derivedCredential?.configured === true)
 }
 
 function targetOf(row: ProviderRow): EditorTarget {
@@ -197,6 +199,7 @@ function targetOf(row: ProviderRow): EditorTarget {
     displayName: row.entry.displayName,
     settingsNs: row.entry.settingsNs,
     settingsPath: row.entry.settingsPath,
+    ...row.authorization === undefined ? {} : { authorization: row.authorization },
     ...credentialRef === undefined ? {} : { credentialRef },
     // Only declared routes may expose route-owned fields.
     ...row.entry.declared === true ? { declared: true } : {},
@@ -387,6 +390,7 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
       <h2 className={styles['title']}>{t('title')}</h2>
       <p className={styles['intro']}>{t('intro')}</p>
       {!state.writable && state.status === 'ready' ? <p className={styles['notice']}>{t('readOnly')}</p> : null}
+      {state.authorizationError === null ? null : <p className={styles['notice']} role="status">{t('authorizationUnavailable')}</p>}
       {savedIdentity === undefined
         ? null
         : (
@@ -416,6 +420,7 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
                   operations,
                   t,
                   readOnly: !state.writable,
+                  onAuthorizationChanged: () => { void controller.load() },
                   onClose: (changed) => { closeSetup(changed, target) },
                 })}
                 {renderSlot(
@@ -428,9 +433,11 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
           }
           const open = !addOpen && editing?.provider === row.entry.provider
           const credentialConfigured = row.credential?.configured === true
+            || row.authorization?.credential.configured === true
           const credentialMissing = !credentialConfigured
             && row.apiKeyEnv !== undefined
             && row.credential?.configured === false
+            && row.authorization?.credential.configured !== true
           return (
             <li key={row.entry.provider} className={styles['rowCard']}>
               <div className={styles['rowHead']}>
@@ -511,6 +518,7 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
                   operations,
                   t,
                   readOnly: !state.writable,
+                  onAuthorizationChanged: () => { void controller.load() },
                   onClose: (changed) => { closeEditor(changed, target) },
                 })
                 : null}
@@ -599,6 +607,8 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
                       operations={operations}
                       t={t}
                       readOnly={!state.writable}
+                      {...draft.target.authorization === undefined ? {} : { authorization: draft.target.authorization }}
+                      onAuthorizationChanged={() => { void controller.load() }}
                       onClose={(changed) => { closeEditor(changed, draft.target) }}
                       onBusyChange={setCatalogBusy}
                     />

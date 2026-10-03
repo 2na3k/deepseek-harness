@@ -19,6 +19,7 @@ import {
 import type { CredentialKey, CredentialProvider, CredentialRecord } from '@deepseek-ai/dsh-credentials'
 import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
 import { LlmError } from '@deepseek-ai/dsh-llm'
+import type { AuthorizationSession } from '@deepseek-ai/dsh-authorization'
 
 /**
  * The record scope every credential this adapter family stores is written
@@ -97,6 +98,51 @@ function toRecord(credential: Credential): CredentialRecord {
     }
   }
   return { kind: 'grant', payload: jsonImage(credential) }
+}
+
+/**
+ * A pi-ai credential store whose only write is admitted by the active
+ * authorization attempt. Reads and enumeration use the ordinary store; a
+ * login mutation runs outside its lock and then commits through the session,
+ * so cancellation cannot let a late OAuth result overwrite stored credentials.
+ * @param ctx - the plugin context carrying the credential service.
+ * @param session - the active authorization session that owns the write.
+ * @param providerId - the one pi-ai provider this login may update.
+ * @returns a session-scoped store for `Models.login()`.
+ */
+export function credentialStoreForAuthorization(
+  ctx: Context,
+  session: AuthorizationSession,
+  providerId: string,
+): CredentialStore {
+  const stored = credentialStoreFrom(ctx)
+  const wrongProvider = (id: string): LlmError => new LlmError(
+    `llm-pi-ai: authorization for "${providerId}" cannot update provider "${id}"`,
+    'AUTHORIZATION_PROVIDER_MISMATCH',
+  )
+  return {
+    read: (id, options) => id === providerId ? stored.read(id, options) : Promise.resolve(undefined),
+    list: () => stored.list(),
+    async modify(id, mutate) {
+      session.signal.throwIfAborted()
+      if (id !== providerId) throw wrongProvider(id)
+      const current = await stored.read(id, { signal: session.signal })
+      session.signal.throwIfAborted()
+      const next = await mutate(current)
+      if (next === undefined) return current
+      session.signal.throwIfAborted()
+      await session.commit(toRecord(next))
+      return next
+    },
+    delete(id) {
+      session.signal.throwIfAborted()
+      if (id !== providerId) throw wrongProvider(id)
+      return Promise.reject(new LlmError(
+        `llm-pi-ai: authorization for "${providerId}" cannot delete its credential; sign out through the credential service`,
+        'AUTHORIZATION_DELETE_UNSUPPORTED',
+      ))
+    },
+  }
 }
 
 /**

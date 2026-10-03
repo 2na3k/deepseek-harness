@@ -7,16 +7,25 @@ import AuthorizationService from '@deepseek-ai/dsh-authorization'
 import type { AuthorizationInteraction, AuthorizationNotice, AuthorizationPrompt } from '@deepseek-ai/dsh-authorization'
 import LocalCredentialProvider from '@deepseek-ai/dsh-credentials-local'
 import type { CredentialKey } from '@deepseek-ai/dsh-credentials'
-import type { AuthEvent, AuthInteraction, AuthPrompt, AuthType, Credential } from '@earendil-works/pi-ai'
+import type { AuthEvent, AuthInteraction, AuthPrompt, AuthType, Credential, CredentialStore } from '@earendil-works/pi-ai'
+import type { PiAiAuthInjection } from '../src/adapter.ts'
 
-const login = vi.hoisted(() => vi.fn())
+const login = vi.hoisted(() => vi.fn<(
+  providerId: string,
+  type: AuthType,
+  interaction: AuthInteraction,
+  credentials: CredentialStore,
+) => Promise<Credential | undefined>>())
 
 // The whole of what this module does with pi-ai is run one provider's login
 // against a collection built with the harness store, so the collection is the
 // boundary worth observing; a real login would open a browser.
 vi.mock('../src/models.ts', async importOriginal => ({
   ...await importOriginal<typeof import('../src/models.ts')>(),
-  createModels: () => ({ setProvider: () => {}, login }),
+  createModels: (auth: PiAiAuthInjection) => ({
+    setProvider: () => {},
+    login: (providerId: string, type: AuthType, interaction: AuthInteraction) => login(providerId, type, interaction, auth.credentials),
+  }),
 }))
 
 const { credentialStoreFrom, authContextFrom, recordKeyFor } = await import('../src/auth.ts')
@@ -24,12 +33,14 @@ const { registerPiAiFlows } = await import('../src/login.ts')
 
 const CODEX = recordKeyFor('openai-codex')
 const dirs: string[] = []
+const contexts: Context[] = []
 
 /** A context with the record store, the seam, and every pi-ai login flow. */
 async function harness(): Promise<Context> {
   const dir = await mkdtemp(join(tmpdir(), 'dsh-pi-login-'))
   dirs.push(dir)
   const ctx = new Context()
+  contexts.push(ctx)
   await ctx.plugin(LocalCredentialProvider, { path: join(dir, '.credentials.yaml'), watch: false })
   await ctx.plugin(AuthorizationService)
   registerPiAiFlows(ctx, { credentials: credentialStoreFrom(ctx), authContext: authContextFrom(ctx) })
@@ -61,10 +72,15 @@ async function attempt(
   request: { key?: CredentialKey; method?: string } = {},
 ): Promise<ReturnType<typeof surface>> {
   const ui = surface()
-  login.mockImplementation(async (providerId: string, _type: AuthType, interaction: AuthInteraction) => {
+  login.mockImplementation(async (
+    providerId: string,
+    _type: AuthType,
+    interaction: AuthInteraction,
+    credentials: CredentialStore,
+  ) => {
     await converse(interaction)
     const granted: Credential = { type: 'oauth', access: 'at', refresh: 'rt', expires: 1 }
-    await credentialStoreFrom(ctx).modify(providerId, () => Promise.resolve(granted))
+    await credentials.modify(providerId, () => Promise.resolve(granted))
     return granted
   })
   await expect(ctx.authorization.begin({
@@ -77,6 +93,8 @@ async function attempt(
 
 afterEach(async () => {
   login.mockReset()
+  vi.restoreAllMocks()
+  await Promise.all(contexts.splice(0).map(ctx => ctx.root.fiber.dispose()))
   await Promise.all(dirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
 })
 
@@ -102,10 +120,10 @@ describe('pi-ai login flows', () => {
     const ctx = await harness()
 
     await attempt(ctx, () => Promise.resolve())
-    expect(login).toHaveBeenLastCalledWith('openai-codex', 'oauth', expect.anything())
+    expect(login).toHaveBeenLastCalledWith('openai-codex', 'oauth', expect.anything(), expect.anything())
 
     await attempt(ctx, () => Promise.resolve(), { key: recordKeyFor('anthropic'), method: 'api-key' })
-    expect(login).toHaveBeenLastCalledWith('anthropic', 'api_key', expect.anything())
+    expect(login).toHaveBeenLastCalledWith('anthropic', 'api_key', expect.anything(), expect.anything())
   })
 
   it('commits what the login produced, where the adapter reads it back', async () => {
@@ -116,6 +134,75 @@ describe('pi-ai login flows', () => {
     await expect(ctx.credentials.readRecord(CODEX)).resolves.toEqual({
       kind: 'grant',
       payload: { type: 'oauth', access: 'at', refresh: 'rt', expires: 1 },
+    })
+  })
+
+  it('does not commit a provider login that finishes after cancellation', async () => {
+    const ctx = await harness()
+    const mutationStarted = Promise.withResolvers<undefined>()
+    const releaseMutation = Promise.withResolvers<undefined>()
+    const loginFinished = Promise.withResolvers<undefined>()
+    const granted: Credential = { type: 'oauth', access: 'late', refresh: 'late-refresh', expires: 1 }
+    login.mockImplementation(async (
+      providerId: string,
+      _type: AuthType,
+      _interaction: AuthInteraction,
+      credentials: CredentialStore,
+    ) => {
+      try {
+        await credentials.modify(providerId, async () => {
+          mutationStarted.resolve(undefined)
+          await releaseMutation.promise
+          return granted
+        })
+        return granted
+      } finally {
+        loginFinished.resolve(undefined)
+      }
+    })
+
+    const pending = ctx.authorization.begin({ key: CODEX, interaction: surface() })
+    await mutationStarted.promise
+    ctx.authorization.cancel(CODEX)
+    await expect(pending).resolves.toEqual({ status: 'cancelled' })
+    releaseMutation.resolve(undefined)
+    await loginFinished.promise
+
+    await expect(ctx.credentials.readRecord(CODEX)).resolves.toBeUndefined()
+  })
+
+  it('lets an admitted credential commit finish before cancellation settles', async () => {
+    const ctx = await harness()
+    const commitStarted = Promise.withResolvers<undefined>()
+    const releaseCommit = Promise.withResolvers<undefined>()
+    const originalModifyRecord = ctx.credentials.modifyRecord.bind(ctx.credentials)
+    vi.spyOn(ctx.credentials, 'modifyRecord').mockImplementation(async (key, mutate) => {
+      if (key === CODEX) {
+        commitStarted.resolve(undefined)
+        await releaseCommit.promise
+      }
+      return originalModifyRecord(key, mutate)
+    })
+    const granted: Credential = { type: 'oauth', access: 'admitted', refresh: 'refresh', expires: 1 }
+    login.mockImplementation(async (
+      providerId: string,
+      _type: AuthType,
+      _interaction: AuthInteraction,
+      credentials: CredentialStore,
+    ) => {
+      await credentials.modify(providerId, () => Promise.resolve(granted))
+      return granted
+    })
+
+    const pending = ctx.authorization.begin({ key: CODEX, interaction: surface() })
+    await commitStarted.promise
+    ctx.authorization.cancel(CODEX)
+    releaseCommit.resolve(undefined)
+
+    await expect(pending).resolves.toEqual({ status: 'authorized' })
+    await expect(ctx.credentials.readRecord(CODEX)).resolves.toEqual({
+      kind: 'grant',
+      payload: { type: 'oauth', access: 'admitted', refresh: 'refresh', expires: 1 },
     })
   })
 

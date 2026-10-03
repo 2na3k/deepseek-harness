@@ -6,7 +6,7 @@ import Schema from '@deepseek-ai/schemastery'
 import { Context } from '@deepseek-ai/cordis'
 import { bindSnapshotSelector, RemoteError } from '@deepseek-ai/dsh-client-test-runtime'
 import type {
-  CredentialInfo, RemoteResult, SettingsNamespaceView,
+  AuthorizationProviderView, CredentialInfo, RemoteResult, SettingsNamespaceView,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import {
@@ -180,6 +180,7 @@ function remoteFail(message: string, code: RefusalCode = 'credential/rejected') 
 }
 
 function scriptedFace(overrides: {
+  authorization?: AuthorizationProviderView[]
   update?: ReturnType<typeof vi.fn>
   mutate?: ReturnType<typeof vi.fn>
   set?: ReturnType<typeof vi.fn>
@@ -191,6 +192,7 @@ function scriptedFace(overrides: {
   const set = overrides.set ?? vi.fn(() => Promise.resolve(remoteOk(undefined)))
   const unset = overrides.unset ?? vi.fn(() => Promise.resolve(remoteOk(undefined)))
   const face = {
+    authorization: { list: async () => remoteOk(overrides.authorization ?? []) },
     llm: {
       listProviders: vi.fn(() => Promise.resolve(remoteOk([
         { id: 'deepseek-official', name: 'DeepSeek' },

@@ -19,9 +19,11 @@ import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typer
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import { z } from 'zod'
 import { CredentialsController } from './credentials.ts'
+import { AuthorizationController } from './authorization.ts'
 import type { SettingsDocumentOpenValue } from './types.ts'
 
 export { CredentialsController } from './credentials.ts'
+export { AuthorizationController } from './authorization.ts'
 export type * from './types.ts'
 
 const settingsNamespaceRequestSchema = z.object({ ns: z.string().min(1) })
@@ -86,6 +88,7 @@ export class SettingsController extends TypertRemoteService {
     super(ctx, 'settingsController', { namespace: 'settings' })
     this.openTextFile = internals.openTextFile ?? openNativeTextFile
     ctx.plugin(CredentialsController)
+    ctx.plugin(AuthorizationController)
   }
 
   /**

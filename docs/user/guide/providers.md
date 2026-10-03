@@ -16,7 +16,15 @@ Keys are write-only. The page receives a redacted descriptor after saving, never
 
 Choose **Add model provider**. The card opens on **Third-party model provider**: pick a provider dsh ships with — the list shows provider ids such as `anthropic`, `openai`, `moonshotai` for Kimi, or `zai` for GLM — enter its API key, and save. The installed catalog supplies the endpoint, protocol, and model list.
 
-Providers that sign in with OAuth, such as Codex, are not supported here yet.
+Providers that offer OAuth can also sign in from this card. Their credentials are stored separately from API keys.
+
+## Use a Codex subscription
+
+In **Add model provider → Third-party model provider**, select `openai-codex`. Choose **Continue with ChatGPT**, open the authorization link, and complete sign-in with your ChatGPT account. If the flow asks for a code or callback URL, enter it in the sign-in form. Save the provider, then select one of its models in the composer.
+
+DSH stores the OAuth grant under `llm-pi-ai/openai-codex` in `$DSH_HOME/.credentials.yaml`, with owner-only permissions on Unix. The adapter reads this grant on each request and persists refreshed tokens under the credential store's cross-process lock. The browser receives credential status, never the saved access or refresh token. This connection uses pi-ai's Codex authentication and does not import the Codex app's credential cache.
+
+Choose **Sign out** on the provider card to remove the saved grant. Deleting a provider's configuration alone keeps its OAuth grant. Model availability and usage limits depend on the signed-in account; a listed model does not confirm account access. See [OpenAI's authentication guide](https://learn.chatgpt.com/docs/auth) for Codex account requirements.
 
 ## Add a custom model API
 
@@ -191,7 +199,7 @@ Every switch, its accepted values, and the protocols that take it are listed und
 
 ## Troubleshooting
 
-- **`MISSING_CREDENTIAL`** — Store the provider key through the Models page or supply the referenced environment variable.
+- **`MISSING_CREDENTIAL`** — Store the provider key through the Models page, supply the referenced environment variable, or sign in for a subscription provider.
 - **`UNKNOWN_MODEL`** — Select a configured model or add the missing model to the custom provider.
 - **Fetching available models returns 401** — Check the key. Model discovery calls the OpenAI-compatible `GET /models` endpoint; enter models manually for endpoints that do not provide it.
 - **Fetching available models reports neither a `data` array nor a `models` object** — The endpoint's listing is in a format discovery does not read. Enter the models by hand.

@@ -1,6 +1,7 @@
 /** Pure first-run readiness projection over the shared Models join. */
 import { describe, expect, it } from 'vitest'
 import type { CredentialInfo } from '@deepseek-ai/dsh-api-remotes/client'
+import { brandString } from '@deepseek-ai/dsh-brand'
 import type { ModelsSettingsState, ProviderRow } from '../src/client/store.ts'
 import { onboardingReadiness, providerUsable } from '../src/client/store.ts'
 
@@ -46,6 +47,7 @@ function state(overrides: Partial<ModelsSettingsState> = {}): ModelsSettingsStat
     status: 'ready',
     error: null,
     credentialError: null,
+    authorizationError: null,
     writable: true,
     rows: [row()],
     namespaces: new Map(),
@@ -63,6 +65,27 @@ describe('providerUsable', () => {
 
   it('treats a reference-free registered route as provider-native authentication', () => {
     expect(providerUsable(otherRow({ apiKeyEnv: undefined, credential: undefined }))).toBe(true)
+  })
+
+  it('requires a stored grant for a route whose registered sign-in flow has no key reference', () => {
+    const authorization = {
+      key: brandString<NonNullable<ProviderRow['authorization']>['key']>('llm-pi-ai/openai-codex'),
+      label: 'ChatGPT (Codex)',
+      methods: [{ id: 'oauth', label: 'ChatGPT' }],
+      inFlight: false,
+      credential: { configured: false, writable: true },
+    } as const
+    const codex = otherRow({
+      entry: { ...otherRow().entry, provider: 'openai-codex' },
+      apiKeyEnv: undefined,
+      credential: undefined,
+      authorization,
+    })
+    expect(providerUsable(codex)).toBe(false)
+    expect(providerUsable({
+      ...codex,
+      authorization: { ...authorization, credential: { configured: true, kind: 'grant', writable: true } },
+    })).toBe(true)
   })
 })
 

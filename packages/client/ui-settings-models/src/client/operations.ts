@@ -1,13 +1,14 @@
 /**
  * The Host reads and writes the Models cards perform, as callbacks built in the
  * plugin body. Cards receive these instead of a context: the outcomes name what
- * a card renders — a stored view, a stale revision, a refusal message — so the
- * failure codes and Remote namespaces stay in the apply world.
+ * a card renders — a stored view, a stale revision, a refusal message, or an
+ * authorization prompt — so the failure codes and Remote namespaces stay in
+ * the apply world.
  */
 
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {
-  CredentialInfo, LlmDiscoveredModel, LlmModelDiscoveryRequest,
+  AuthorizationAttemptId, AuthorizationFrame, AuthorizationPromptId, CredentialInfo, LlmDiscoveredModel, LlmModelDiscoveryRequest,
   SettingsNamespaceView, SettingsPathOpView,
 } from '@deepseek-ai/dsh-api-remotes/client'
 
@@ -32,6 +33,20 @@ export type ModelDiscoveryOutcome =
 
 /** The Host operations the Models page and its cards invoke. */
 export interface ModelsOperations {
+  /**
+   * Start a sign-in flow; closing the stream cancels the attempt.
+   * @param key - credential record address supplied by the flow registry.
+   * @param method - selected sign-in method, or undefined for the flow default.
+   * @param signal - cancellation for the stream and attempt.
+   * @returns notices, prompts, and the terminal outcome.
+   */
+  beginAuthorization(key: string, method: string | undefined, signal: AbortSignal): AsyncIterable<AuthorizationFrame>
+  /** @param attemptId - active attempt id. @param promptId - pending prompt id. @param answer - user answer. @returns refusal, if any. */
+  respondAuthorization(attemptId: AuthorizationAttemptId, promptId: AuthorizationPromptId, answer: string): Promise<string | undefined>
+  /** @param attemptId - active attempt id. @returns refusal, if any. */
+  cancelAuthorization(attemptId: AuthorizationAttemptId): Promise<string | undefined>
+  /** @param key - credential record address. @returns refusal, if any. */
+  clearAuthorization(key: string): Promise<string | undefined>
   /**
    * Read one credential reference's state.
    * @param ref - credential reference name.
@@ -75,12 +90,25 @@ export interface ModelsOperations {
 
 /**
  * Bind the page's Host operations to the plugin's own Remote namespaces.
- * @param ctx - the page plugin's context, which declares `remote.credentials`,
- * `remote.llm`, and `remote.settings` in its own `inject`.
+ * @param ctx - the page plugin's context, which declares `remote.authorization`,
+ * `remote.credentials`, `remote.llm`, and `remote.settings` in its own `inject`.
  * @returns the callbacks the section and its cards are injected with.
  */
 export function createModelsOperations(ctx: ClientContext): ModelsOperations {
   return {
+    beginAuthorization: (key, method, signal) => ctx.remote.authorization.begin(key, method, signal),
+    respondAuthorization: async (attemptId, promptId, answer) => {
+      const response = await ctx.remote.authorization.respond(attemptId, promptId, answer)
+      return response.ok ? undefined : response.error.message
+    },
+    cancelAuthorization: async (attemptId) => {
+      const response = await ctx.remote.authorization.cancel(attemptId)
+      return response.ok ? undefined : response.error.message
+    },
+    clearAuthorization: async (key) => {
+      const response = await ctx.remote.authorization.clear(key)
+      return response.ok ? undefined : response.error.message
+    },
     describeCredential: async (ref) => {
       const response = await ctx.remote.credentials.describe([ref])
       return response.ok ? response.value[ref] : undefined

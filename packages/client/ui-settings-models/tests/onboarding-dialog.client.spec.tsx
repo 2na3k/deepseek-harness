@@ -91,6 +91,7 @@ function harness(options: {
     return Promise.resolve(remoteOk(undefined))
   })
   const face = {
+    authorization: { list: async () => ({ ok: true, value: [] }) },
     llm: {
       listProviders: () => {
         if (options.providersFailure !== undefined) return Promise.resolve(remoteFail(options.providersFailure))

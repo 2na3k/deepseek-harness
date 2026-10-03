@@ -8,7 +8,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`@deepseek-ai/dsh-api-settings-controller` exposes generated `ctx.remote.settings` and `ctx.remote.credentials` namespaces for browser configuration surfaces. It returns redacted settings and credential metadata, supports settings and credential writes without returning secret values, and opens provider-owned settings or Agent preset locations on the Host desktop. When a provider is absent, the namespace remains registered and returns an actionable configuration error.
+`@deepseek-ai/dsh-api-settings-controller` exposes generated `ctx.remote.settings`, `ctx.remote.credentials`, and `ctx.remote.authorization` namespaces for browser configuration surfaces. It returns redacted settings and credential metadata, supports settings and credential writes without returning secret values, streams human-guided authorization, and opens provider-owned settings or Agent preset locations on the Host desktop. When a provider is absent, the namespace remains registered and returns an actionable configuration error.
 
 ## Table of Contents
 
@@ -30,6 +30,8 @@ Mount this package as a Loader entry in a profile that serves browser configurat
 `settings.describe()` returns deployment facts and every namespace under `redactSecrets: true`. `settings.update`, `settings.replace`, and `settings.mutate` expose the settings service's three write operations and return the namespace's new redacted view; stale writes use `settings-conflict` and other provider refusals use `settings-rejected`.
 
 `settings.openSettingsDocument()` prepares the provider-owned document and opens it with the native text editor; it accepts no browser-supplied filesystem target.
+
+`authorization.list()` returns registered sign-in methods and safe credential facts. `authorization.begin(key, method)` streams notices and prompts; `authorization.respond(attemptId, promptId, answer)` answers a prompt, and `authorization.cancel(attemptId)` withdraws the attempt. Closing the stream cancels the attempt. `authorization.clear(key)` cancels an active attempt and removes its local record; provider-specific remote revocation is not part of this namespace. Grant payloads never cross the Remote.
 
 -----
 
@@ -57,6 +59,7 @@ No direct effect; reading or writing these configuration values does not alter m
 <a id="known-limitations-and-deferred-work"></a>
 
 - The batch bound is fixed at 64 references and is not a deployment-configurable field.
+- Clearing a credential removes its local record; providers that require server-side revocation need a provider-specific sign-out operation.
 
 <a id="dev-note"></a>
 ### Dev Note

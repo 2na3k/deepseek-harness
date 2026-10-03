@@ -9,8 +9,8 @@
   en: 0db6fa836e1ff511
   zh: 0e2968763e1fb7a5
 /deepseek-ai-dsh-client-ui-settings-models/summary:
-  en: 51252c1e9fa6da0a
-  zh: 227b54d7898417fa
+  en: 5d1d8eb1c48d3927
+  zh: e00c000955e5877a
 /deepseek-ai-dsh-client-ui-settings-models/table-of-contents:
   en: d152484eb41ac6b4
   zh: 09388d293f9be9cb
@@ -26,12 +26,15 @@
 /deepseek-ai-dsh-client-ui-settings-models/use-this-package/adding-and-deleting-providers:
   en: 9d533c65c82cd4a4
   zh: 0a5da334e127c035
+/deepseek-ai-dsh-client-ui-settings-models/use-this-package/provider-sign-in:
+  en: 8ad38f3ba589dab1
+  zh: e215129e738d6fd3
 /deepseek-ai-dsh-client-ui-settings-models/use-this-package/first-run-dialogs:
   en: 589397a35f82244e
   zh: 342fbceee2c173a2
 /deepseek-ai-dsh-client-ui-settings-models/use-this-package/extension-slots:
-  en: 65e9d8822b67b6c2
-  zh: 7e83be9defda28ee
+  en: 8bf4501b7f378c09
+  zh: 624fb833b578b190
 /deepseek-ai-dsh-client-ui-settings-models/understand-the-implementation:
   en: a87afbec5e339b36
   zh: 6348c81af7e650e1

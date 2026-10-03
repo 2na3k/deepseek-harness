@@ -61,6 +61,10 @@ AccountDetails.balance projects recharge wallets in value and promotional wallet
 
 Bonus notification queries return an AccountBonusBatch with the current Platform account id and eligible orders in server order. AccountBonusNotification retains the server message and expiry without projecting credentials. Acknowledgment carries the expected account id and order id; the Host refuses it after an account change. Both notification operations use the initiating UI language through x-client-locale, without a language query parameter.
 
+## Browser authorization
+
+The Models page uses `ctx.authorizationController` to list available flows, stream sign-in notices and prompts, submit answers, cancel attempts, and clear locally stored grants. `AuthorizationProviderView` contains flow metadata and credential presence, kind, and writability; it contains no credential values. `AuthorizationFrame` carries notices, prompts without their host-side cancellation signals, and the attempt outcome. Branded `AuthorizationAttemptId` and `AuthorizationPromptId` identify one active attempt and prompt; stale answers are refused. Closing the stream cancels its attempt. Sign-out waits for any admitted credential commit before deleting the local grant.
+
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
 <a id="cordis-surface"></a>
@@ -129,6 +133,52 @@ async begin(request: AuthorizationRequest): Promise<AuthorizationOutcome>
 ```
 
 Source: [`packages/credentials/authorization/src/index.ts`](../../packages/credentials/authorization/src/index.ts)
+
+<a id="ctxauthorizationcontroller--authorizationcontroller"></a>
+
+### `ctx.authorizationController` — `AuthorizationController`
+
+Host service backing `ctx.remote.authorization`; grants and prompt answers remain in the Host process while safe interaction frames cross the Remote.
+
+```ts cordis-catalog
+/**
+ * List available flows and safe credential facts for a settings surface.
+ * @returns registered flows with no grant payloads or token values.
+ */
+@Remote async list(): Promise<AuthorizationProviderView[]>
+
+/**
+ * Start one authorization and stream its notices, prompts, and outcome.
+ * @param key - registered credential key.
+ * @param method - optional method offered by that flow.
+ * @param signal - Remote stream lifetime; closing the stream cancels the attempt.
+ * @returns safe frames until the attempt settles.
+ */
+@Remote({ mode: 'stream' }) async *begin(key: string, method: string | undefined, signal: AbortSignal): AsyncIterable<AuthorizationFrame>
+
+/**
+ * Answer the active prompt for an attempt.
+ * @param attemptId - id emitted by the attempt's `started` frame.
+ * @param promptId - id emitted by the corresponding `prompt` frame.
+ * @param answer - typed text or selected option id.
+ * @throws RemoteError when the prompt is absent or the answer is invalid.
+ */
+@Remote respond(attemptId: AuthorizationAttemptId, promptId: AuthorizationPromptId, answer: string): void
+
+/**
+ * Cancel an active authorization attempt.
+ * @param attemptId - id emitted by the attempt's `started` frame.
+ */
+@Remote cancel(attemptId: AuthorizationAttemptId): void
+
+/**
+ * Remove a stored credential without exposing its payload.
+ * @param key - registered credential key to clear.
+ */
+@Remote async clear(key: string): Promise<void>
+```
+
+Source: [`packages/api/settings-controller/src/authorization.ts`](../../packages/api/settings-controller/src/authorization.ts)
 
 <a id="ctxcredentials--credentialprovider-abstract-seam"></a>
 

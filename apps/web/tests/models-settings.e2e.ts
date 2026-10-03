@@ -76,7 +76,7 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     const dialog = page.getByRole('dialog', { name: '设置' })
     await dialog.waitFor({ timeout: 10_000 })
     await dialog.getByRole('button', { name: '模型', exact: true }).click()
-    await dialog.getByText('填入各提供商的 API 密钥即可使用其模型。').waitFor({ timeout: 10_000 })
+    await dialog.getByText('连接提供商即可使用其模型。').waitFor({ timeout: 10_000 })
     // The dormant pi-ai adapter contributes its whole installed catalog; no
     // provider is configured yet, so the page is one add button.
     const add = dialog.getByRole('button', { name: '添加模型提供商' })
@@ -162,7 +162,7 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
       async () => dialog.getByRole('textbox', { name: 'API 密钥', exact: true }).count(),
       { timeout: 10_000 },
     ).toBe(0)
-    await dialog.getByRole('img', { name: 'API 密钥已配置' }).waitFor({ timeout: 10_000 })
+    await dialog.getByRole('img', { name: '凭据已配置' }).waitFor({ timeout: 10_000 })
     await dialog.getByText('已保存 minimax-cn。', { exact: true }).waitFor({ timeout: 10_000 })
     const document = await readFile(join(scaffold.harnessHome, 'profiles', 'scaffold', 'cordis.patch.yml'), 'utf8')
     expect(document).toContain('minimax-cn:')

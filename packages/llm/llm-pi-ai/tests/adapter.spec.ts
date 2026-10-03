@@ -1,6 +1,12 @@
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { Context, Service } from '@deepseek-ai/cordis'
+import AuthorizationService from '@deepseek-ai/dsh-authorization'
 import { AttachmentId, AttachmentStore, ImageVariantId } from '@deepseek-ai/dsh-attachment'
+import { credentialKey } from '@deepseek-ai/dsh-credentials'
+import LocalCredentialProvider from '@deepseek-ai/dsh-credentials-local'
 import type {
   ImageAttachmentLimits,
   ImageAttachmentRef,
@@ -9,7 +15,7 @@ import type {
   SaveImageAttachment,
   StoredImageAttachment,
 } from '@deepseek-ai/dsh-attachment'
-import LlmRuntime, { createToolResultMessage, createUserMessage, CONTEXT_WINDOW_EXCEEDED_CODE, LlmError, ReasoningEffortId, userAgent } from '@deepseek-ai/dsh-llm'
+import LlmRuntime, { createSystemMessage, createToolResultMessage, createUserMessage, CONTEXT_WINDOW_EXCEEDED_CODE, LlmError, ReasoningEffortId, userAgent } from '@deepseek-ai/dsh-llm'
 import * as LlmPiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
@@ -22,6 +28,8 @@ import { closeMockServers, mockServer, textEvents } from './mock-server.ts'
 afterEach(async () => {
   vi.useRealTimers()
   vi.unstubAllEnvs()
+  await Promise.all(codexContexts.splice(0).map(ctx => ctx.root.fiber.dispose()))
+  await Promise.all(codexDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
   await closeMockServers()
 })
 
@@ -34,6 +42,8 @@ const IMAGE_REF: ImageAttachmentRef = {
 }
 const HOST_IMAGE_PATH = '/host/.dsh/attachments/objects/aa/object'
 const MODEL_IMAGE_PATH = '/model/.dsh/attachments/objects/aa/object'
+const codexContexts: Context[] = []
+const codexDirs: string[] = []
 
 class MappedFileSystem extends Service {
   constructor(ctx: Context) {
@@ -74,6 +84,106 @@ beforeEach(() => {
 })
 
 describe('PiAiAdapter provider routing', () => {
+  it('streams the built-in Codex subscription route with its account token and complete history', async () => {
+    const response = {
+      id: 'resp_codex_fixture',
+      object: 'response',
+      created_at: 1,
+      status: 'completed',
+      model: 'gpt-6-luna',
+      output: [{
+        id: 'msg_codex_fixture',
+        type: 'message',
+        status: 'completed',
+        role: 'assistant',
+        content: [{ type: 'output_text', annotations: [], logprobs: [], text: 'Codex reply' }],
+      }],
+      usage: {
+        input_tokens: 3,
+        input_tokens_details: { cached_tokens: 0 },
+        output_tokens: 2,
+        output_tokens_details: { reasoning_tokens: 0 },
+        total_tokens: 5,
+      },
+    }
+    const message = response.output[0]!
+    const part = message.content[0]!
+    const server = await mockServer([{ events: [
+      JSON.stringify({ type: 'response.created', response: { ...response, status: 'in_progress', output: [] } }),
+      JSON.stringify({ type: 'response.output_item.added', output_index: 0, item: { ...message, status: 'in_progress', content: [] } }),
+      JSON.stringify({ type: 'response.content_part.added', item_id: message.id, output_index: 0, content_index: 0, part: { ...part, text: '' } }),
+      JSON.stringify({ type: 'response.output_text.delta', item_id: message.id, output_index: 0, content_index: 0, delta: 'Codex reply', logprobs: [] }),
+      JSON.stringify({ type: 'response.output_text.done', item_id: message.id, output_index: 0, content_index: 0, text: 'Codex reply', logprobs: [] }),
+      JSON.stringify({ type: 'response.content_part.done', item_id: message.id, output_index: 0, content_index: 0, part }),
+      JSON.stringify({ type: 'response.output_item.done', output_index: 0, item: message }),
+      JSON.stringify({ type: 'response.completed', response }),
+    ] }])
+    const payload = Buffer.from(JSON.stringify({
+      exp: Math.floor(Date.now() / 1000) + 3600,
+      'https://api.openai.com/auth': { chatgpt_account_id: 'account_fixture' },
+    })).toString('base64url')
+    const dir = await mkdtemp(join(tmpdir(), 'dsh-pi-codex-'))
+    codexDirs.push(dir)
+    const ctx = new Context()
+    codexContexts.push(ctx)
+    await ctx.plugin(LocalCredentialProvider, { path: join(dir, '.credentials.yaml'), watch: false })
+    await ctx.plugin(AuthorizationService)
+    await ctx.plugin(LlmRuntime)
+    await ctx.credentials.modifyRecord(credentialKey('llm-pi-ai', 'openai-codex'), () => Promise.resolve({
+      kind: 'grant',
+      payload: {
+        type: 'oauth',
+        access: `header.${payload}.signature`,
+        refresh: 'refresh_fixture',
+        expires: Date.now() + 3_600_000,
+      },
+    }))
+    await ctx.plugin(LlmPiAi, {
+      providers: { 'openai-codex': { baseURL: server.url, transport: 'sse' } },
+    })
+
+    const result = await assemble(ctx, {
+      provider: 'openai-codex',
+      model: 'gpt-6-luna',
+      messages: [
+        createSystemMessage('Use the stored conversation history.'),
+        createUserMessage({ content: [{ type: 'text', text: 'Earlier question' }], source: { kind: 'user' } }),
+        createUserMessage({ content: [{ type: 'text', text: 'Current question' }], source: { kind: 'user' } }),
+      ],
+    })
+
+    expect(result.finish.kind).toBe('stop')
+    expect(result.message.content).toEqual([{ type: 'text', text: 'Codex reply' }])
+    if (result.message.role !== 'assistant') throw new Error('Codex response was not an assistant message')
+    expect(result.message.source.replayState).toMatchObject({
+      response: {
+        kind: 'pi-ai',
+        api: 'openai-codex-responses',
+        provider: 'openai-codex',
+        model: 'gpt-6-luna',
+        responseId: 'resp_codex_fixture',
+      },
+      blocks: [{ type: 'text' }],
+    })
+    expect(server.paths).toEqual(['/codex/responses'])
+    expect(server.headers[0]).toMatchObject({
+      authorization: 'Bearer header.' + payload + '.signature',
+      'chatgpt-account-id': 'account_fixture',
+      accept: 'text/event-stream',
+    })
+    expect(server.requests[0]).toMatchObject({
+      model: 'gpt-6-luna',
+      store: false,
+      stream: true,
+      instructions: 'Use the stored conversation history.',
+      input: [
+        { role: 'user', content: [{ type: 'input_text', text: 'Earlier question' }] },
+        { role: 'user', content: [{ type: 'input_text', text: 'Current question' }] },
+      ],
+    })
+    expect(JSON.stringify(server.requests[0])).not.toContain('"role":"system"')
+  })
+
   it('resolves a catalog model dynamically and uses a private endpoint', async () => {
     const server = await mockServer([{ events: textEvents }])
     const ctx = await harness(server.url)

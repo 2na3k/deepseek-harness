@@ -265,6 +265,36 @@
   color: var(--dsw-alias-label-secondary);
 }
 
+.authCard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-settings-card-fill);
+}
+
+.authHeading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.authNotice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-primary);
+  overflow-wrap: anywhere;
+}
+
+.authNotice a { color: var(--dsw-alias-state-business-primary); }
+.authNotice code { font-size: 13px; }
+
 .linkButton {
   box-sizing: border-box;
   display: inline-flex;

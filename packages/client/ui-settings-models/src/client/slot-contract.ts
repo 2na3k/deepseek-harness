@@ -47,7 +47,7 @@ export interface ProviderCardExtrasOwnerProps {
   provider: ProviderDirectoryEntry
   /** Whether any layer configures this provider (its profile resolves); `false` while the add-provider draft edits a dormant row. */
   configured: boolean
-  /** Whether the row's referenced api-key credential is confirmed configured (the page's credential join). */
+  /** Whether the page confirms a referenced API-key or provider sign-in credential is configured. */
   keyConfigured: boolean
 }
 

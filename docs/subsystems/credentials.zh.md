@@ -61,6 +61,10 @@ AccountDetails.balance 将充值钱包投影为 value、赠送钱包投影为 bo
 
 赠金通知查询返回 AccountBonusBatch，包含当前 Platform 账号 id 和按服务端顺序排列的可通知订单。AccountBonusNotification 保留服务端消息与到期时间，不投影凭证。确认请求携带预期账号 id 和订单 id；账号变化后 Host 拒绝该请求。两项通知操作都通过 x-client-locale 传递发起界面的语言，不使用语言查询参数。
 
+## 浏览器授权
+
+模型页面通过 `ctx.authorizationController` 列出可用流程、流式接收登录提示和问题、提交答案、取消尝试以及清除本地保存的授权。`AuthorizationProviderView` 包含流程元数据，以及凭据是否存在、类型和可写性；不包含凭据值。`AuthorizationFrame` 携带通知、移除了 Host 侧取消信号的问题以及尝试结果。品牌类型 `AuthorizationAttemptId` 和 `AuthorizationPromptId` 标识一次活动尝试及其问题；过期答案会被拒绝。关闭流会取消对应尝试。退出登录会等待已获准的凭据提交完成，再删除本地授权。
+
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
 <a id="cordis-surface"></a>
@@ -129,6 +133,52 @@ async begin(request: AuthorizationRequest): Promise<AuthorizationOutcome>
 ```
 
 Source: [`packages/credentials/authorization/src/index.ts`](../../packages/credentials/authorization/src/index.ts)
+
+<a id="ctxauthorizationcontroller--authorizationcontroller"></a>
+
+### `ctx.authorizationController` — `AuthorizationController`
+
+Host service backing `ctx.remote.authorization`; grants and prompt answers remain in the Host process while safe interaction frames cross the Remote.
+
+```ts cordis-catalog
+/**
+ * List available flows and safe credential facts for a settings surface.
+ * @returns registered flows with no grant payloads or token values.
+ */
+@Remote async list(): Promise<AuthorizationProviderView[]>
+
+/**
+ * Start one authorization and stream its notices, prompts, and outcome.
+ * @param key - registered credential key.
+ * @param method - optional method offered by that flow.
+ * @param signal - Remote stream lifetime; closing the stream cancels the attempt.
+ * @returns safe frames until the attempt settles.
+ */
+@Remote({ mode: 'stream' }) async *begin(key: string, method: string | undefined, signal: AbortSignal): AsyncIterable<AuthorizationFrame>
+
+/**
+ * Answer the active prompt for an attempt.
+ * @param attemptId - id emitted by the attempt's `started` frame.
+ * @param promptId - id emitted by the corresponding `prompt` frame.
+ * @param answer - typed text or selected option id.
+ * @throws RemoteError when the prompt is absent or the answer is invalid.
+ */
+@Remote respond(attemptId: AuthorizationAttemptId, promptId: AuthorizationPromptId, answer: string): void
+
+/**
+ * Cancel an active authorization attempt.
+ * @param attemptId - id emitted by the attempt's `started` frame.
+ */
+@Remote cancel(attemptId: AuthorizationAttemptId): void
+
+/**
+ * Remove a stored credential without exposing its payload.
+ * @param key - registered credential key to clear.
+ */
+@Remote async clear(key: string): Promise<void>
+```
+
+Source: [`packages/api/settings-controller/src/authorization.ts`](../../packages/api/settings-controller/src/authorization.ts)
 
 <a id="ctxcredentials--credentialprovider-abstract-seam"></a>
 

@@ -1,15 +1,15 @@
 /**
  * Models settings page store: one snapshot joining the configurable-provider
  * directory (`llm/listProviders` joined with `llm/listConfigurableProviders`),
- * the settings namespaces (shared settings mirror),
- * and the referenced credentials (`credentials/describe`). The host stays the
- * single fact source — every mutation writes through the wire and the page
- * re-renders from the next describe, pushed or refetched.
+ * the settings namespaces (shared settings mirror), referenced API-key
+ * credentials (`credentials/describe`), and safe authorization-flow status.
+ * The host stays the single fact source — every mutation writes through the
+ * wire and the page re-renders from the next describe, pushed or refetched.
  */
 
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {
-  CredentialInfo, LlmConfigurableProvider, LlmProviderInfo, SettingsNamespaceView,
+  AuthorizationProviderView, CredentialInfo, LlmConfigurableProvider, LlmProviderInfo, SettingsNamespaceView,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
@@ -90,6 +90,8 @@ export interface ProviderRow {
    * own derivation rule.
    */
   derivedCredential?: CredentialInfo
+  /** Registered sign-in flow for this catalog route, with safe credential state. */
+  authorization?: AuthorizationProviderView
 }
 
 /** Page snapshot. */
@@ -99,6 +101,8 @@ export interface ModelsSettingsState {
   error: string | null
   /** Credential enrichment failure; provider/settings rows remain usable. */
   credentialError: string | null
+  /** Sign-in registry enrichment failure; provider/settings rows remain usable. */
+  authorizationError: string | null
   /** Whether the settings provider accepts writes. */
   writable: boolean
   /** Every configurable provider joined with its configured/credential state. */
@@ -155,7 +159,8 @@ function apiKeyEnvOf(
 export class ModelsSettingsStore {
   /** The snapshot the section renders from (uSES-safe store). */
   readonly store: SnapshotStore<ModelsSettingsState> = createSnapshotStore<ModelsSettingsState>({
-    status: 'idle', error: null, credentialError: null, writable: false, rows: [], namespaces: new Map(),
+    status: 'idle', error: null, credentialError: null, authorizationError: null,
+    writable: false, rows: [], namespaces: new Map(),
   })
 
   /** Latest load wins; an older response never overwrites a newer one. */
@@ -184,10 +189,11 @@ export class ModelsSettingsStore {
   async load(): Promise<void> {
     const generation = ++this.generation
     this.store.update((s) => { s.status = 'loading'; s.error = null })
-    const [registered, declared] = await Promise.all([
+    const [registered, declared, , authorizationResponse] = await Promise.all([
       this.ctx.remote.llm.listProviders(),
       this.ctx.remote.llm.listConfigurableProviders(),
       this.describeFace.ensure(),
+      this.ctx.remote.authorization.list(),
     ])
     if (!registered.ok) { this.failLoad(generation, registered.error.message); return }
     if (!declared.ok) { this.failLoad(generation, declared.error.message); return }
@@ -197,6 +203,10 @@ export class ModelsSettingsStore {
       return
     }
     const providers = joinProviderDirectory(registered.value, declared.value)
+    const authorizations: readonly AuthorizationProviderView[] = authorizationResponse.ok
+      ? authorizationResponse.value
+      : []
+    const authorizationError = authorizationResponse.ok ? null : authorizationResponse.error.message
     const writable = mirrored.view.writable
     const views: readonly SettingsNamespaceView[] = mirrored.view.namespaces
     const namespaces = new Map(views.map(view => [view.ns, view]))
@@ -208,10 +218,12 @@ export class ModelsSettingsStore {
         && entry.settingsPath.length > 0
         && this.schema.hasPath(namespace.user, entry.settingsPath)
         && !this.schema.hasPath(namespace.base, entry.settingsPath)
+      const authorization = authorizations.find(view => String(view.key) === `${entry.settingsNs}/${entry.provider}`)
       return {
         entry,
         configured,
         removable,
+        ...authorization === undefined ? {} : { authorization },
         apiKeyEnv: entry.provider === 'deepseek-account' ? undefined : apiKeyEnvOf(namespace, entry.settingsPath, this.schema),
         credential: undefined,
       }
@@ -239,6 +251,7 @@ export class ModelsSettingsStore {
       s.status = 'ready'
       s.error = null
       s.credentialError = credentialError
+      s.authorizationError = authorizationError
       s.writable = writable
       s.rows = rows.filter(row => row.entry.provider !== 'deepseek-account' || row.accountAvailable === true).map((row) => {
         if (row.entry.provider === 'deepseek-account') return row
@@ -269,14 +282,19 @@ export class ModelsSettingsStore {
  * registered with the adapter registry, and whatever credential its resolved
  * profile names is stored. A profile naming no reference authenticates through
  * the provider's own path (the Bedrock chain, Vertex ADC, a gateway that needs
- * nothing), as does a live route with no settings address at all, so neither
- * owes this page a key.
+ * nothing), as does a live route with no settings address at all. An
+ * OAuth-only flow is the exception: that route needs its grant before it can
+ * serve a request.
  * @param row - one joined provider row.
  * @returns whether the user already has this provider to talk to.
  */
 export function providerUsable(row: ProviderRow): boolean {
   if (!row.entry.active) return false
   if (row.entry.provider === 'deepseek-account') return row.accountAvailable === true
+  if (row.authorization?.credential.configured === true) return true
+  if (row.apiKeyEnv === undefined
+    && row.authorization?.methods.length !== 0
+    && row.authorization?.methods.every(method => method.id === 'oauth') === true) return false
   if (row.apiKeyEnv === undefined) return true
   return row.credential?.configured === true
 }

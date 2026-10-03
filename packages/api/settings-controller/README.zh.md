@@ -8,7 +8,7 @@ kind: "package-reference"
 
 ## 概述
 
-`@deepseek-ai/dsh-api-settings-controller` 为浏览器配置界面提供生成的 `ctx.remote.settings` 与 `ctx.remote.credentials` namespace。它返回脱敏的 settings 与凭据元数据，支持 settings 与凭据写入而不返回机密值，并在 Host 桌面打开由提供方持有的 settings 或 Agent preset 位置。提供方缺失时，namespace 仍会注册，并返回可操作的配置错误。
+`@deepseek-ai/dsh-api-settings-controller` 为浏览器配置界面提供生成的 `ctx.remote.settings`、`ctx.remote.credentials` 与 `ctx.remote.authorization` namespace。它返回脱敏的 settings 与凭据元数据，支持不返回机密值的 settings 和凭据写入，流式传递由人参与的授权过程，并在 Host 桌面打开由提供方持有的 settings 或 Agent preset 位置。提供方缺失时，namespace 仍会注册，并返回可操作的配置错误。
 
 ## 目录
 
@@ -30,6 +30,8 @@ kind: "package-reference"
 `settings.describe()` 返回部署信息，以及在 `redactSecrets: true` 下读取的所有 namespace。`settings.update`、`settings.replace` 与 `settings.mutate` 暴露 settings 服务的三种写入操作，并返回该 namespace 的新脱敏视图；陈旧写入使用 `settings-conflict`，其他提供方拒绝使用 `settings-rejected`。
 
 `settings.openSettingsDocument()` 准备提供方持有的文档，并用原生文本编辑器打开；该方法不接受浏览器提供的文件系统目标。
+
+`authorization.list()` 返回已注册的登录方式和安全凭据事实。`authorization.begin(key, method)` 流式传递 notice 与 prompt；`authorization.respond(attemptId, promptId, answer)` 回答 prompt，`authorization.cancel(attemptId)` 撤销本地尝试。关闭 stream 会取消尝试。`authorization.clear(key)` 会取消活跃尝试并删除本地记录；本 namespace 不负责提供方的远程撤销。授权 payload 不会跨越 Remote。
 
 -----
 
@@ -57,6 +59,7 @@ kind: "package-reference"
 <a id="known-limitations-and-deferred-work"></a>
 
 - 批量上限固定为 64 个引用，不是可按部署配置的字段。
+- 清除凭据会删除本地记录；需要服务器端撤销的提供方必须提供专用的登出操作。
 
 <a id="dev-note"></a>
 ### 开发备注
