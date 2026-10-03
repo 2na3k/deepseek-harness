@@ -8,12 +8,12 @@
   - button "打开配置文件"
   - button "关闭"
   - heading "模型" [level=2]
-  - paragraph: 填入各提供商的 API 密钥即可使用其模型。
+  - paragraph: 连接提供商即可使用其模型。
   - list
   - tablist "添加方式":
     - tab "第三方模型提供商" [selected]
     - tab "自定义模型 API"
-  - paragraph: 从内置目录中选择 OpenAI、Anthropic、Kimi 等提供商，填入其 API 密钥即可使用。
+  - paragraph: 从内置目录中选择提供商，然后登录或填入其 API 密钥。
   - tabpanel "第三方模型提供商":
     - text: 提供商
     - combobox "提供商":
@@ -58,6 +58,9 @@
       - option "xiaomi-token-plan-sgp"
       - option "zai"
       - option "zai-coding-cn"
+    - region "MiniMax CN":
+      - text: MiniMax CN 未登录
+      - button "登录"
     - text: API 密钥
     - textbox "API 密钥":
       - /placeholder: 输入 API 密钥，或留空使用环境认证

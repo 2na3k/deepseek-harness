@@ -18,7 +18,16 @@
       "path": "../../preset/agent-preset-registry"
     },
     {
+      "path": "../../credentials/authorization"
+    },
+    {
       "path": "../../credentials/credentials"
+    },
+    {
+      "path": "../../util/brand"
+    },
+    {
+      "path": "../../util/values"
     },
     {
       "path": "../../core/session"

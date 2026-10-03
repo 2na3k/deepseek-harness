@@ -9,8 +9,11 @@
   en: 2c6b665adc256b4e
   zh: 2240e4c1573ebe9c
 /configure-models/add-a-third-party-provider:
-  en: 0fe5f88e692f618c
-  zh: 4f2e493818d8934f
+  en: 5d6fcb76db6340a4
+  zh: 69973e8d65649397
+/configure-models/use-a-codex-subscription:
+  en: 96ef8729dfd95f73
+  zh: a8fe58fd432672c1
 /configure-models/add-a-custom-model-api:
   en: 17867305a3e1b52a
   zh: 876fedf1f6f563e4
@@ -33,5 +36,5 @@
   en: 6f52195d1502783e
   zh: 34dbbeacb541afd4
 /configure-models/troubleshooting:
-  en: 0477cd6fa2772d6b
-  zh: 780619fe998bdef7
+  en: 6be1a01d14dd0666
+  zh: d2aa23404e8ce684

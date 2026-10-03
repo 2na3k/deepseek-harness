@@ -12,7 +12,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { AuthorizationMethod, AuthorizationPrompt, AuthorizationSession } from '@deepseek-ai/dsh-authorization'
 import { isCredentialKeySegment } from '@deepseek-ai/dsh-credentials'
 import { catalogProvider, catalogProviderIds } from './catalog.ts'
-import { recordKeyFor } from './auth.ts'
+import { credentialStoreForAuthorization, recordKeyFor } from './auth.ts'
 import type { PiAiAuthInjection } from './adapter.ts'
 import { createModels } from './models.ts'
 
@@ -143,13 +143,16 @@ export function registerPiAiFlows(ctx: Context, auth: PiAiAuthInjection): void {
         // A collection of its own, holding only the provider being signed
         // into: login is not serving requests, and the credential it produces
         // lands in the shared store either way.
-        const models = createModels(auth)
+        const models = createModels({
+          ...auth,
+          credentials: credentialStoreForAuthorization(ctx, session, providerId),
+        })
         models.setProvider(provider)
         // Total over the two ids declared above, and the seam only ever hands
         // back one a flow declared.
         const type: AuthType = session.method === 'oauth' ? 'oauth' : 'api_key'
-        // pi-ai persists what the login returns through that same store, which
-        // is what makes it the single writer of this record.
+        // pi-ai writes what the login returns through this session-scoped
+        // store; its modify path admits that grant through `session.commit()`.
         await models.login(providerId, type, {
           signal: session.signal,
           notify: (event) => { relay(event, session) },

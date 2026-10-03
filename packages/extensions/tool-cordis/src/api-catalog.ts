@@ -549,6 +549,41 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'authorizationController',
+    summary: 'Host service backing `ctx.remote.authorization`; grants and prompt answers remain in the Host process while safe interaction frames cross the Remote.',
+    description: 'Host service backing `ctx.remote.authorization`; grants and prompt answers remain in the Host process while safe interaction frames cross the Remote.',
+    methods: [
+      {
+        signature: '@Remote async list(): Promise<AuthorizationProviderView[]>',
+        description: 'List available flows and safe credential facts for a settings surface.',
+        parameters: [],
+        returns: 'registered flows with no grant payloads or token values.',
+      },
+      {
+        signature: '@Remote({ mode: \'stream\' }) async *begin(key: string, method: string | undefined, signal: AbortSignal): AsyncIterable<AuthorizationFrame>',
+        description: 'Start one authorization and stream its notices, prompts, and outcome.',
+        parameters: [{ name: 'key', description: 'registered credential key.' }, { name: 'method', description: 'optional method offered by that flow.' }, { name: 'signal', description: 'Remote stream lifetime; closing the stream cancels the attempt.' }],
+        returns: 'safe frames until the attempt settles.',
+      },
+      {
+        signature: '@Remote respond(attemptId: AuthorizationAttemptId, promptId: AuthorizationPromptId, answer: string): void',
+        description: 'Answer the active prompt for an attempt.',
+        parameters: [{ name: 'attemptId', description: 'id emitted by the attempt\'s `started` frame.' }, { name: 'promptId', description: 'id emitted by the corresponding `prompt` frame.' }, { name: 'answer', description: 'typed text or selected option id.' }],
+        throws: ['RemoteError when the prompt is absent or the answer is invalid.'],
+      },
+      {
+        signature: '@Remote cancel(attemptId: AuthorizationAttemptId): void',
+        description: 'Cancel an active authorization attempt.',
+        parameters: [{ name: 'attemptId', description: 'id emitted by the attempt\'s `started` frame.' }],
+      },
+      {
+        signature: '@Remote async clear(key: string): Promise<void>',
+        description: 'Remove a stored credential without exposing its payload.',
+        parameters: [{ name: 'key', description: 'registered credential key to clear.' }],
+      },
+    ],
+  },
+  {
     key: 'browserUse',
     summary: 'Owns one optional provider registration in the shared browser-use service.',
     description: 'Owns one optional provider registration in the shared browser-use service.',
@@ -4661,12 +4696,20 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type AttachmentId = Branded<\'AttachmentId\'>;',
   },
   {
+    name: 'AuthorizationAttemptId',
+    declaration: 'export type AuthorizationAttemptId = Branded<\'AuthorizationAttemptId\'>;',
+  },
+  {
     name: 'AuthorizationEntry',
     declaration: 'export interface AuthorizationEntry {\n    key: CredentialKey;\n    label: string;\n    methods: readonly AuthorizationMethod[];\n    inFlight: boolean;\n}',
   },
   {
     name: 'AuthorizationFlow',
     declaration: 'export interface AuthorizationFlow {\n    readonly key: CredentialKey;\n    readonly label: string;\n    readonly methods: readonly [\n        AuthorizationMethod,\n        ...AuthorizationMethod[]\n    ];\n    run(session: AuthorizationSession): Promise<void>;\n}',
+  },
+  {
+    name: 'AuthorizationFrame',
+    declaration: 'export type AuthorizationFrame = {\n    readonly type: \'started\';\n    readonly attemptId: AuthorizationAttemptId;\n} | {\n    readonly type: \'notice\';\n    readonly notice: AuthorizationNotice;\n} | {\n    readonly type: \'prompt\';\n    readonly attemptId: AuthorizationAttemptId;\n    readonly promptId: AuthorizationPromptId;\n    readonly prompt: AuthorizationPromptView;\n} | {\n    readonly type: \'prompt-withdrawn\';\n    readonly attemptId: AuthorizationAttemptId;\n    readonly promptId: AuthorizationPromptId;\n} | {\n    readonly type: \'settled\';\n    readonly outcome: AuthorizationOutcome | {\n        readonly status: \'failed\';\n        readonly message: string;\n    };\n};',
   },
   {
     name: 'AuthorizationInteraction',
@@ -4689,8 +4732,20 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type AuthorizationPrompt = {\n    signal?: AbortSignal;\n} & ({\n    kind: \'text\';\n    message: string;\n    placeholder?: string;\n} | {\n    kind: \'secret\';\n    message: string;\n    placeholder?: string;\n} | {\n    kind: \'select\';\n    message: string;\n    options: readonly AuthorizationPromptOption[];\n});',
   },
   {
+    name: 'AuthorizationPromptId',
+    declaration: 'export type AuthorizationPromptId = Branded<\'AuthorizationPromptId\'>;',
+  },
+  {
     name: 'AuthorizationPromptOption',
     declaration: 'export interface AuthorizationPromptOption {\n    id: string;\n    label: string;\n    description?: string;\n}',
+  },
+  {
+    name: 'AuthorizationPromptView',
+    declaration: 'export type AuthorizationPromptView = AuthorizationPrompt extends infer Prompt ? Prompt extends {\n    signal?: AbortSignal;\n} ? Omit<Prompt, \'signal\'> : never : never;',
+  },
+  {
+    name: 'AuthorizationProviderView',
+    declaration: 'export interface AuthorizationProviderView extends AuthorizationEntry {\n    readonly credential: {\n        readonly configured: boolean;\n        readonly kind?: CredentialRecord[\'kind\'];\n        readonly writable: boolean;\n    };\n}',
   },
   {
     name: 'AuthorizationRequest',

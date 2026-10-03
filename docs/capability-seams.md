@@ -74,6 +74,7 @@ flowchart LR
   svc_jobController["ctx.jobController<br/>Host job Remote controller"]
   pkg_api_settings_controller["api-settings-controller"]
   svc_credentialsController["ctx.credentialsController<br/>Host credential-surface Remote controller"]
+  svc_authorizationController["ctx.authorizationController<br/>Host authorization Remote controller"]
   svc_settingsController["ctx.settingsController<br/>Host settings-surface Remote controller"]
   pkg_api_workspace_files["api-workspace-files"]
   svc_workspaceFiles["ctx.workspaceFiles<br/>Host workspace file Remote service"]
@@ -284,6 +285,7 @@ flowchart LR
   pkg_api_session_controller --> svc_sessionController
   pkg_api_session_controller --> svc_sessionFileReferences
   pkg_api_session_controller --> svc_sessionSkillCatalog
+  pkg_api_settings_controller --> svc_authorizationController
   pkg_api_settings_controller --> svc_credentialsController
   pkg_api_settings_controller --> svc_settingsController
   pkg_api_terminal_controller --> svc_terminalController
@@ -439,6 +441,7 @@ flowchart LR
   svc_attachments --> pkg_llm_deepseek
   svc_attachments --> pkg_llm_pi_ai
   svc_attachments --> pkg_tool_fs
+  svc_authorization --> pkg_api_settings_controller
   svc_authorization --> pkg_llm_pi_ai
   svc_browserUse --> pkg_experimental_browser_use_chrome_devtools_mcp
   svc_browserUse --> pkg_experimental_browser_use_playwright_mcp
@@ -593,6 +596,7 @@ flowchart LR
 | `ctx.sessionSkillCatalog` | `core` | [`api-session-controller`](../packages/api/session-controller) | - | - | - | Lists the Session composition's user-invocable skills without activating a cold Agent. |
 | `ctx.jobController` | `core` | [`api-job-controller`](../packages/api/job-controller) | - | - | - | Streams one background job's observation record over the generated Remote namespace; the roster stays on the session control stream. |
 | `ctx.credentialsController` | `core` | [`api-settings-controller`](../packages/api/settings-controller) | - | - | - | Projects the credential-reference seam onto the generated Remote namespace: batch fan-out, view projection, and refusal mapping live here, not on the seam Definition. |
+| `ctx.authorizationController` | `core` | [`api-settings-controller`](../packages/api/settings-controller) | - | - | - | Streams sign-in notices and prompts, submits answers, and clears stored grants while credential values remain on the Host. |
 | `ctx.settingsController` | `core` | [`api-settings-controller`](../packages/api/settings-controller) | - | - | - | Projects the user-settings seam onto the generated Remote namespace: the read is always redacted and every refusal is classified here, not on the seam Definition. |
 | `ctx.workspaceFiles` | `core` | [`api-workspace-files`](../packages/api/workspace-files) | - | - | - | Serves stat, paged text, byte windows, directory listings, and the change feed for files inside a Session's workspace root, confined by lstat, containment, and a stat re-check. |
 | `ctx.workspaceChanges` | `core` | [`workspace-changes`](../packages/deliverables/workspace-changes) | - | - | - | Serves the summary each workspace/changes event announced and each listed file's turn-start and turn-end comparison, by Session and event sequence, until that Session is disposed; the log carries only the turn. |
@@ -607,7 +611,7 @@ flowchart LR
 | `ctx.subagentModelSelection` | `core` | [`tool-subagent`](../packages/subagent/tool-subagent) | - | [`tool-subagent`](../packages/subagent/tool-subagent) | - | Owns the default-off settings namespace that Agent-scoped delegation tools sample when composing a new top-level Session. |
 | `ctx.credentials` | `seam` | [`credentials`](../packages/credentials/credentials) | [`credentials-local`](../packages/credentials/credentials-local) | [`api-settings-controller`](../packages/api/settings-controller), [`llm-deepseek`](../packages/llm/llm-deepseek), [`llm-pi-ai`](../packages/llm/llm-pi-ai) | - | Configuration carries references to secrets; providers own the values. Consumers resolve per operation, so a rotated credential reaches the very next request; the settings controller exposes value-free views and write-only storage. |
 | `ctx.deepseekAccount` | `seam` | [`deepseek-account`](../packages/credentials/deepseek-account) | [`deepseek-account-platform`](../packages/credentials/deepseek-account-platform) | [`api-account-controller`](../packages/api/account-controller), [`llm-deepseek`](../packages/llm/llm-deepseek) | - | The Host owns browser authorization and local credentials; UI consumers receive state without tokens. |
-| `ctx.authorization` | `seam` | [`authorization`](../packages/credentials/authorization) | - | [`llm-pi-ai`](../packages/llm/llm-pi-ai) | - | Flows are registered by the plugin that knows how to obtain one credential and keyed by the record they write; the seam owns the conversation and the one-attempt-per-key lifecycle, never the protocol. |
+| `ctx.authorization` | `seam` | [`authorization`](../packages/credentials/authorization) | - | [`api-settings-controller`](../packages/api/settings-controller), [`llm-pi-ai`](../packages/llm/llm-pi-ai) | - | Flows are registered by the plugin that knows how to obtain one credential and keyed by the record they write; the seam owns the conversation and the one-attempt-per-key lifecycle, never the protocol. |
 | `ctx.productAnalytics` | `service` | [`client-product-analytics`](../packages/client/product-analytics) | - | - | - | Accepts selected Desktop events, enriches available login identity, and observes live compaction under the live Host collection policy. |
 | `ctx.otel` | `service` | [`otel`](../packages/telemetry/otel) | - | [`host-product-telemetry-otel`](../packages/host/product-telemetry-otel), [`session-telemetry-otel`](../packages/session/session-telemetry-otel) | - | Product analytics and Session feedback adapters create independent reporting channels through one injected service. |
 | `ctx.productTelemetry` | `service` | [`host-product-telemetry-otel`](../packages/host/product-telemetry-otel) | - | - | - | Exports explicitly submitted analytics events through OTLP/HTTP; mounting alone collects nothing. |

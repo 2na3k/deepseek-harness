@@ -24,7 +24,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type {
-  CredentialInfo, SettingsNamespaceView, SettingsPathOpView,
+  AuthorizationProviderView, CredentialInfo, SettingsNamespaceView, SettingsPathOpView,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import {
@@ -32,6 +32,7 @@ import {
 } from './DeepSeekModelsEditor.tsx'
 import { apiKeyFailure } from './apiKey.ts'
 import { EditorFooter } from './EditorFooter.tsx'
+import { AuthorizationCard } from './AuthorizationCard.tsx'
 import { ModelListEditor } from './ModelListEditor.tsx'
 import { deriveKeyRef, protocolChoices } from './store.ts'
 import { protocolLabel } from './protocol-label.ts'
@@ -69,6 +70,10 @@ export interface ProviderEditorProps {
   settingsPath: readonly string[]
   /** The Host operations this card writes and interrogates through. */
   operations: ModelsOperations
+  /** Registered provider sign-in flow and safe stored-credential state. */
+  authorization?: AuthorizationProviderView
+  /** Refresh the page after authorization changes. */
+  onAuthorizationChanged?: () => void
   /** Section copy. */
   t: (key: keyof typeof en) => string
   /** Disable writes (read-only settings provider). */
@@ -378,6 +383,13 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
       defaultMaxTokens={typeof defaultMaxTokens === 'number' ? defaultMaxTokens : undefined} />
     return (
       <>
+        {props.authorization === undefined ? null : <AuthorizationCard
+          authorization={props.authorization}
+          provider={props.provider}
+          operations={operations}
+          t={t}
+          onChanged={() => { props.onAuthorizationChanged?.() }}
+        />}
         <div className={styles['field']}>
           <span className={styles['fieldLabel']}>{t('keyInput')}</span>
           <input

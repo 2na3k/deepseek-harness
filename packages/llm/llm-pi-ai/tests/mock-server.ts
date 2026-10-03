@@ -1,5 +1,6 @@
 import { createServer } from 'node:http'
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
+import { zstdDecompressSync } from 'node:zlib'
 
 export interface MockServer {
   url: string
@@ -52,11 +53,15 @@ export async function mockServer(script: {
       closedResponses += 1
       responseClosed.resolve(undefined)
     })
-    let body = ''
-    request.on('data', (chunk: Buffer) => { body += chunk.toString('utf8') })
+    const bodyChunks: Buffer[] = []
+    request.on('data', (chunk: Buffer) => { bodyChunks.push(chunk) })
     request.on('end', () => {
       paths.push(request.url ?? '')
-      requests.push(body.length === 0 ? undefined : JSON.parse(body))
+      const body = Buffer.concat(bodyChunks)
+      const json = request.headers['content-encoding'] === 'zstd'
+        ? zstdDecompressSync(body).toString('utf8')
+        : body.toString('utf8')
+      requests.push(json.length === 0 ? undefined : JSON.parse(json))
       headers.push(request.headers)
       requestReceived.resolve(undefined)
       const behavior = script.shift() ?? { status: 500, body: 'script exhausted' }

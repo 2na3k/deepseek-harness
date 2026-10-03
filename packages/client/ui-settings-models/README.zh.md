@@ -11,7 +11,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-client-ui-settings-models` 是 dsh Web 客户端的 Models 设置页面：用户可以配置 API 密钥（以只写方式存入 profile 的凭据引用之下）、编辑每个提供商的模型列表，并手工声明自定义 pi-ai 路由；页面以提供商行展示，一次只展开一张编辑卡片。该页面把提供商目录、设置文档与凭据描述合并为一个共享快照，因此行的状态在三个方面始终一致。它还会带首次运行的用户走两个有序弹窗——版本化预览版说明，以及按条件显示的官方 DeepSeek 凭据步骤。
+`dsh-client-ui-settings-models` 是 dsh Web 客户端的 Models 设置页面：用户可以登录受支持的提供商、配置 API 密钥（以只写方式存入 profile 的凭据引用之下）、编辑每个提供商的模型列表，并手工声明自定义 pi-ai 路由；页面以提供商行展示，一次只展开一张编辑卡片。该页面把提供商目录、设置文档、凭据描述与授权状态合并为一个共享快照。它还会带首次运行的用户走两个有序弹窗——版本化预览版说明，以及按条件显示的官方 DeepSeek 凭据步骤。
 
 ## 目录
 
@@ -55,13 +55,17 @@ API 密钥输入框初始为空，并通过 `autocomplete="new-password"` 请求
 
 **添加模型提供商**是新增卡片的唯一入口：只要任一带编辑器的设置 namespace 已挂载就会出现，下述两种方式任一可继续时才可点击。卡片打开后顶部是分段式的方式切换，下方一行小字说明所选方式的用途：**第三方模型提供商**承载休眠目录提供商选择框与提供商编辑器——裸挂载的 `llm-pi-ai` 在任何路由存在之前就能提供其完整的已安装 catalog；**自定义模型 API**承载为 pi-ai 不提供的路由（中转站、自部署服务或其他兼容 OpenAI / Anthropic 协议的接口）准备的创建表单。某种方式只在其 namespace 已挂载时提供；只剩一种方式时卡片以该方式为标题直接显示表单；namespace 已无可采用的提供商或没有可声明的协议时，对应方式会被禁用并把原因作为悬停提示。面板在其方式首次显示时挂载，之后在卡片打开且该方式仍被提供期间保持挂载但隐藏，因此切换方式不会丢掉任何一边的草稿；任一面板有写入或端点探测进行中时滑块锁定，因为此时切换会让结果落到看不见的面板上。每个 tab 通过 id 控制其面板，关闭任一面板都会忘记目录草稿的目标。自定义表单会索要唯一的 **Provider ID**、端点、协议与至少一个可唯一识别的模型，因为没有东西能为它们兜底。协议选择框以产品名称显示各协议——OpenAI Chat Completions、OpenAI Responses、Anthropic Messages——存储的值仍是 schema 标识符；适配器新增而本页尚未命名的协议直接显示其标识符。端点占位示例随所选协议变化：OpenAI Chat Completions 与 Responses 显示 `https://gateway.example/v1`，Anthropic Messages 显示 `https://gateway.example`，因为其 SDK 会追加 `/v1/messages`。切换协议会保留已输入的地址。端点必须是可解析的 HTTP 或 HTTPS URL；localhost、IPv4 与 IPv6 字面地址以及自定义端口仍然有效。语法错误会在字段处阻止询问与创建，请求失败则继续作为独立的提供商错误显示。**获取可用模型**通过 `llm/discoverModels` Remote 查询表单显示的端点，因此新增提供商一次即可完成，而非先保存再返回；回复打开的是可搜索选择器而非直接写入，只有点击**添加所选**才会写入。候选项使用等宽字体显示原始模型 id，以区分同名模型。每行保持单行，悬停可查看模型名称，未提供名称时回退到完整 id。勾选与配置仍使用原始模型 id。每个选中候选会在提供商公布相应信息时，把 id、显示名、上下文窗口、最大输出 token 数和已公布的输入类型复制进可编辑行；已经存在的行保留用户调整过的值。搜索会匹配模型 id 与可选显示名称，且不会清除隐藏项的勾选状态。**全选**会加入可见结果，而**取消全选**会清空全部勾选，以免意外采用隐藏结果。只有用户层单独携带某行时，该行才可删除（删除会恢复组合基线），其确认对话框会指名该提供商。
 
+### 提供商登录
+
+当提供商注册了授权流程时，编辑器会显示登录方式。支持多种方式的提供商会显示方式选择器；选择 OAuth 不需要 API Key，同时接受 API Key 的提供商仍会保留 API Key 输入框。登录通知、链接、代码与提示会显示在编辑器中，Host 会将授权凭据保存在凭据记录存储中。状态只会报告是否已保存且可写。**退出登录**会清除该记录。Codex OAuth 操作标记为 **使用 ChatGPT 继续**。登录失败时编辑器会保持打开，方便重试。
+
 ### 首次运行弹窗
 
 版本化声明步骤完成后，DeepSeek 步骤从同一份合并快照投影首次运行就绪状态。用户已经能够到达的**任何**提供商都会直接结束该步骤、不做渲染；只有没有任何提供商的用户才会被询问官方 DeepSeek 密钥。「稍后配置」只完成这次协调器遍历；适配器缺失、路由不活动、合并失败、只读部署或能力不可用时，该步骤不渲染即完成——Models 仍是诊断界面。
 
 ### 扩展 slot
 
-本分区为仓库外分发的插件声明两个席位，类型定义在 [`src/client/slot-contract.ts`](src/client/slot-contract.ts) 并从 `./client` 导出。`settings.models.provider-card`（keyed）渲染在每张展示目录行的卡片内部——已保存行的卡片、其首次运行 setup 形态、以及「添加提供商」草稿卡——以 `entryKey = settingsNs` 分发，owner props 携带该行的 `ConfigurableProviderView`、其 configured 状态与已确认的 api-key 凭据状态，因此以某适配器家族的 namespace 注册一次即可收到该家族的全部卡片，含手工声明的路由；手工声明的草稿卡尚无目录行，保存之前不分发。`settings.models.footer`（list）渲染在行列表与新增控件之后。注册方通过 `ctx.slots.inject` 激活，并以 type-only import 引入本包 `/client` 入口；没有注册方时两个席位均不渲染任何内容。
+本分区为仓库外分发的插件声明两个席位，类型定义在 [`src/client/slot-contract.ts`](src/client/slot-contract.ts) 并从 `./client` 导出。`settings.models.provider-card`（keyed）渲染在每张展示目录行的卡片内部——已保存行的卡片、其首次运行 setup 形态、以及「添加提供商」草稿卡——以 `entryKey = settingsNs` 分发，owner props 携带该行的 `ConfigurableProviderView`、其 configured 状态，以及页面是否确认 API Key 或提供商登录凭据已配置，因此以某适配器家族的 namespace 注册一次即可收到该家族的全部卡片，含手工声明的路由；手工声明的草稿卡尚无目录行，保存之前不分发。`settings.models.footer`（list）渲染在行列表与新增控件之后。注册方通过 `ctx.slots.inject` 激活，并以 type-only import 引入本包 `/client` 入口；没有注册方时两个席位均不渲染任何内容。
 
 Models 页面包含 **DeepSeek 账号**（`deepseek-account`，英文为 **DeepSeek Account**）。其编辑器展示共享的 DeepSeek 模型目录，不提供 API Key 或 Base URL 输入框；目录保存到账号路由自己的设置段（默认为 `llm-deepseek-account`），因此账号侧的编辑不会改写 official 路由读取的 `llm-deepseek` 段。账号可用模型目录为空时隐藏账号行，包括登录前和退登后；账号模型恢复可用时重新显示。
 

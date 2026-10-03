@@ -2545,7 +2545,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
       },
     ],
     ownerProps: [
-      '/** Owner share of one provider-card extension occurrence. */\nexport interface ProviderCardExtrasOwnerProps {\n  /** The card\'s directory row (route id, display name, settings address, live state). */\n  provider: ProviderDirectoryEntry\n  /** Whether any layer configures this provider (its profile resolves); `false` while the add-provider draft edits a dormant row. */\n  configured: boolean\n  /** Whether the row\'s referenced api-key credential is confirmed configured (the page\'s credential join). */\n  keyConfigured: boolean\n}',
+      '/** Owner share of one provider-card extension occurrence. */\nexport interface ProviderCardExtrasOwnerProps {\n  /** The card\'s directory row (route id, display name, settings address, live state). */\n  provider: ProviderDirectoryEntry\n  /** Whether any layer configures this provider (its profile resolves); `false` while the add-provider draft edits a dormant row. */\n  configured: boolean\n  /** Whether the page confirms a referenced API-key or provider sign-in credential is configured. */\n  keyConfigured: boolean\n}',
     ],
     ownerPropsReferences: [
       'ProviderDirectoryEntry',

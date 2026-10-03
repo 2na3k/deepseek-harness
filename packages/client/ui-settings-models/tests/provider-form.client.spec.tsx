@@ -113,6 +113,7 @@ function scriptedFace(options: {
   const mutate = options.mutate ?? vi.fn(() => Promise.resolve(remoteOk(namespace)))
   const set = options.set ?? vi.fn(() => Promise.resolve(remoteOk(undefined)))
   const face = {
+    authorization: { list: async () => ({ ok: true, value: [] }) },
     llm: {
       listProviders: vi.fn(() => Promise.resolve(ok(
         Object.keys(providers).map(provider => ({ id: provider, name: provider })),
